@@ -1532,7 +1532,6 @@ describe("chat daemon worker", () => {
 							mtimeNs: endpointIdentity.mtimeNs,
 							ctimeNs: endpointIdentity.ctimeNs,
 							size: endpointIdentity.size,
-							dev: endpointIdentity.dev,
 							ino: endpointIdentity.ino,
 						},
 					}),
