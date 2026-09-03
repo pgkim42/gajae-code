@@ -1,12 +1,18 @@
 import * as fs from "node:fs/promises";
-import { getProjectDir, getTrustedHomeDir } from "@gajae-code/utils";
+import {
+	getAgentDir,
+	getAgentProfileAuthority,
+	getProjectDir,
+	getTrustedHomeDir,
+	normalizePathForComparison,
+} from "@gajae-code/utils";
 import { findRepoRoot } from "../capability/fs";
 import { skillCapability } from "../capability/skill";
 import type { SourceMeta } from "../capability/types";
 import type { SkillsSettings } from "../config/settings";
 import { resolveSkillScopeTrust } from "../config/skill-settings-defaults";
 import { type Skill as CapabilitySkill, getCapability } from "../discovery";
-import { compareSkillOrder, scanSkillsFromDir } from "../discovery/helpers";
+import { compareSkillOrder, resolveUserAgentDir, scanSkillsFromDir } from "../discovery/helpers";
 import type { SkillPromptDetails } from "../session/messages";
 import { CANONICAL_GJC_WORKFLOW_SKILLS } from "../skill-state/canonical-skills";
 import { expandTilde } from "../tools/path-utils";
@@ -113,6 +119,8 @@ export interface LoadSkillsOptions extends SkillsSettings {
 	home?: string;
 	/** Explicit user agent directory for native user-scope skill discovery. */
 	agentDir?: string;
+	/** Resolver-owned classification for the selected agent directory. */
+	profileAuthority?: "default" | "custom";
 }
 
 /**
@@ -142,7 +150,17 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 	if (!enabled) {
 		return { skills: [], warnings: [] };
 	}
+	const homeWasInjected = options.home !== undefined;
 	const home = options.home ?? getTrustedHomeDir();
+	const agentDir = options.agentDir ?? (homeWasInjected ? resolveUserAgentDir(home) : getAgentDir());
+	const profileAuthority =
+		options.profileAuthority ??
+		(!homeWasInjected
+			? options.agentDir !== undefined &&
+				normalizePathForComparison(options.agentDir) !== normalizePathForComparison(getAgentDir())
+				? "custom"
+				: getAgentProfileAuthority()
+			: undefined);
 
 	const projectTrusted = resolveSkillScopeTrust(options, "project");
 	const userTrusted = resolveSkillScopeTrust(options, "user");
@@ -169,7 +187,8 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 	const result = await nativeProvider.load({
 		cwd,
 		home,
-		userAgentDir: options.agentDir,
+		userAgentDir: agentDir,
+		profileAuthority,
 		repoRoot: await findRepoRoot(cwd),
 	});
 
