@@ -27,14 +27,13 @@ import {
 import { ACP_SESSION_RECONNECT, SESSION_REQUEST_TIMEOUT_MS } from "../session-reconnect";
 
 export interface SessionEndpointIdentity {
+	readonly dev: bigint;
 	readonly mtimeMs: number;
 	readonly mtimeNs: bigint;
 	readonly ctimeNs: bigint;
 	readonly size: bigint;
 	readonly ino: bigint;
 }
-
-type SessionEndpointFileIdentity = SessionEndpointIdentity & { readonly dev: bigint };
 
 /**
  * Exact identity of one attached SDK session endpoint. Providers persist it next to
@@ -58,6 +57,7 @@ export function sessionAttachmentAuthorityId(input: {
 		.digest("hex");
 	const endpointIdentity = input.endpointIdentity
 		? {
+				dev: input.endpointIdentity.dev.toString(),
 				mtimeMs: input.endpointIdentity.mtimeMs,
 				mtimeNs: input.endpointIdentity.mtimeNs.toString(),
 				ctimeNs: input.endpointIdentity.ctimeNs.toString(),
@@ -323,7 +323,7 @@ type AttachedSession = {
 	readonly pid: number;
 	readonly endpointMtimeMs: number;
 	/** No-follow endpoint identity proven before this attachment became current. */
-	readonly endpointIdentity: SessionEndpointFileIdentity;
+	readonly endpointIdentity: SessionEndpointIdentity;
 	readonly runEpoch: number;
 	readonly client: SessionRouterClient;
 	readonly indexed: IndexedSession;
@@ -445,7 +445,7 @@ function readNonnegativeSequence(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
-async function lstatEndpoint(file: string): Promise<SessionEndpointFileIdentity | undefined> {
+async function lstatEndpoint(file: string): Promise<SessionEndpointIdentity | undefined> {
 	const stat = await fs.lstat(file).catch(() => undefined);
 	if (!stat?.isFile()) return undefined;
 	const identity = await fs.lstat(file, { bigint: true }).catch(() => undefined);
@@ -458,11 +458,11 @@ async function lstatEndpoint(file: string): Promise<SessionEndpointFileIdentity 
 	)
 		return undefined;
 	return {
+		dev: identity.dev,
 		mtimeMs: stat.mtimeMs,
 		mtimeNs: identity.mtimeNs,
 		ctimeNs: identity.ctimeNs,
 		size: identity.size,
-		dev: identity.dev,
 		ino: identity.ino,
 	};
 }
@@ -471,7 +471,7 @@ function warningAffectsSession(warning: string, sessionId: string): boolean {
 	return !warning.startsWith("Session ") || warning.includes(`Session ${sessionId} `);
 }
 
-function sameEndpointIdentity(expected: SessionEndpointFileIdentity, current: SessionEndpointFileIdentity): boolean {
+function sameEndpointIdentity(expected: SessionEndpointIdentity, current: SessionEndpointIdentity): boolean {
 	return (
 		expected.mtimeMs === current.mtimeMs &&
 		expected.mtimeNs === current.mtimeNs &&
@@ -482,7 +482,7 @@ function sameEndpointIdentity(expected: SessionEndpointFileIdentity, current: Se
 	);
 }
 
-function matchesIndexedEndpointIdentity(identity: SessionEndpointFileIdentity, indexed: IndexedSession): boolean {
+function matchesIndexedEndpointIdentity(identity: SessionEndpointIdentity, indexed: IndexedSession): boolean {
 	if (indexed.endpointMtimeMs === undefined || !Number.isFinite(indexed.endpointMtimeMs)) return false;
 	if (indexed.endpointFileId === undefined) return identity.mtimeMs === indexed.endpointMtimeMs;
 	return (
@@ -1437,7 +1437,7 @@ export class SessionRouter {
 	 */
 	async #readProvenEndpoint(
 		indexed: IndexedSession,
-	): Promise<{ endpoint: SdkSessionEndpoint; identity: SessionEndpointFileIdentity } | null> {
+	): Promise<{ endpoint: SdkSessionEndpoint; identity: SessionEndpointIdentity } | null> {
 		if (!isSessionAuthorityEligible(indexed)) return null;
 		const cwd = indexed.locator.cwd;
 		const defaultStateRoot = path.join(cwd, ".gjc", "state");

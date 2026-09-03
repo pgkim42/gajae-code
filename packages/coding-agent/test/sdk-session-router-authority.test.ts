@@ -17,6 +17,7 @@ import {
 	type SessionRouterClient,
 	SessionRouterError,
 	type SessionRouterFrame,
+	sessionAttachmentAuthorityId,
 } from "../src/sdk/router";
 import { SESSION_REQUEST_TIMEOUT_MS } from "../src/sdk/session-reconnect";
 
@@ -1539,6 +1540,71 @@ describe("SessionRouter dispatch authority", () => {
 		} finally {
 			await fixture.router.stop();
 		}
+	});
+
+	test("revokes rounded lifecycle adoption when the endpoint file identity differs", async () => {
+		const removed: Array<string | undefined> = [];
+		const fixture = await routerFixture({
+			initiallyIndexed: false,
+			onSessionRemoved: (_attachment, reason) => {
+				removed.push(reason);
+			},
+		});
+		const endpoint = (await Bun.file(fixture.endpointFile).json()) as Record<string, unknown>;
+		const identity = fs.statSync(fixture.endpointFile, { bigint: true });
+		const descriptorMtimeMs = Number(identity.mtimeNs) / 1_000_000;
+		const lifecycleFileId = `${identity.dev}:${identity.ino}`;
+		const successorFileId = `${identity.dev}:${identity.ino + 1n}`;
+		const adopted = await fixture.router.adoptLifecycleResult(
+			{
+				ok: true,
+				result: {
+					sessionId: fixture.sessionId,
+					endpointGeneration: fixture.authority.generation,
+					pid: fixture.authority.pid,
+					endpointMtimeMs: descriptorMtimeMs + 0.0005,
+					endpointFileId: lifecycleFileId,
+					endpoint,
+				},
+			},
+			{ sessionId: fixture.sessionId, cwd: fixture.repo },
+		);
+		try {
+			expect(adopted.isCurrent()).toBe(false);
+			fixture.authority.endpointMtimeMs = descriptorMtimeMs + 0.0005;
+			fixture.authority.endpointFileId = successorFileId;
+			fixture.authority.indexed = true;
+			await fixture.router.reconcile();
+			expect(adopted.isCurrent()).toBe(false);
+			expect(fixture.router.attachment(fixture.sessionId)).toBeNull();
+			expect(removed).toEqual(["removed"]);
+		} finally {
+			await fixture.router.stop();
+		}
+	});
+
+	test("binds durable attachment authority IDs to the endpoint device", () => {
+		const endpointIdentity = {
+			dev: 7n,
+			mtimeMs: 1_000.123,
+			mtimeNs: 1_000_123_456n,
+			ctimeNs: 1_000_123_457n,
+			size: 64n,
+			ino: 11n,
+		};
+		const input = {
+			sessionId: "router-session",
+			generation: 1,
+			pid: 42,
+			endpointMtimeMs: endpointIdentity.mtimeMs,
+			url: "ws://router.test",
+			token: "secret",
+			endpointIdentity,
+		};
+
+		expect(sessionAttachmentAuthorityId(input)).not.toBe(
+			sessionAttachmentAuthorityId({ ...input, endpointIdentity: { ...endpointIdentity, dev: 8n } }),
+		);
 	});
 
 	test("revokes lifecycle adoption when the index remains missing or terminal", async () => {
