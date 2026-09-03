@@ -2696,6 +2696,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					}
 				: {}),
 			getSessionFile: () => sessionManager.getSessionFile() ?? null,
+			getSessionAgentDir: () => session?.getSessionAgentDir() ?? options.agentDir ?? settings.getAgentDir(),
 			getEvalKernelOwnerId: () => evalKernelOwnerId,
 			assertEvalExecutionAllowed: () => session?.assertEvalExecutionAllowed(),
 			trackEvalExecution: (execution, abortController) =>
