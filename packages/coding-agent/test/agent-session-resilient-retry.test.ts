@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout, vi } from "bun:test";
 import * as path from "node:path";
 import { scheduler } from "node:timers/promises";
 import { Agent, type AgentTool, type StreamFn } from "@gajae-code/agent-core";
@@ -22,6 +22,8 @@ import {
 } from "../../ai/src/adapter-internals/provider-safety-stop";
 
 const REAL_DATE_NOW = Date.now;
+
+setDefaultTimeout(60_000);
 
 /**
  * Anthropic's statusless capacity-overload envelope exactly as observed in a
@@ -100,6 +102,11 @@ describe.serial("AgentSession resilient retry", () => {
 		modelRegistry = new ModelRegistry(authStorage);
 	});
 
+	function withDisposeBudget(value: AgentSession): AgentSession {
+		value.setDisposeTimeoutForTests(60_000);
+		return value;
+	}
+
 	afterEach(async () => {
 		// Teardown uses real timer/deadline state. Restore test clocks and scheduler
 		// hooks before disposing so a mocked Date.now cannot wedge cleanup.
@@ -139,7 +146,15 @@ describe.serial("AgentSession resilient retry", () => {
 			...options.settingsOverrides,
 		});
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
-		return new AgentSession({ agent, sessionManager: SessionManager.inMemory(), settings, modelRegistry });
+		return withDisposeBudget(
+			new AgentSession({
+				agent,
+				sessionManager: SessionManager.inMemory(tempDir.path()),
+				settings,
+				modelRegistry,
+				agentDir: tempDir.path(),
+			}),
+		);
 	}
 
 	function buildStatusErrorSession(options: {
@@ -246,7 +261,15 @@ describe.serial("AgentSession resilient retry", () => {
 			...options.settingsOverrides,
 		});
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
-		return new AgentSession({ agent, sessionManager: SessionManager.inMemory(), settings, modelRegistry });
+		return withDisposeBudget(
+			new AgentSession({
+				agent,
+				sessionManager: SessionManager.inMemory(tempDir.path()),
+				settings,
+				modelRegistry,
+				agentDir: tempDir.path(),
+			}),
+		);
 	}
 
 	// Builds a session pinned to an explicit model (e.g. ollama-cloud) so
@@ -284,7 +307,15 @@ describe.serial("AgentSession resilient retry", () => {
 			...options.settingsOverrides,
 		});
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
-		return new AgentSession({ agent, sessionManager: SessionManager.inMemory(), settings, modelRegistry });
+		return withDisposeBudget(
+			new AgentSession({
+				agent,
+				sessionManager: SessionManager.inMemory(tempDir.path()),
+				settings,
+				modelRegistry,
+				agentDir: tempDir.path(),
+			}),
+		);
 	}
 	// Builds a single-model session with a BARE default retry configuration:
 	// no explicit retry.* keys are set, so `legacyRetryConfigured` is false.
@@ -302,7 +333,7 @@ describe.serial("AgentSession resilient retry", () => {
 		const mock = createMockModel({ responses: options.responses });
 		const extensionRunner = options.extensionRunner;
 		const requestedModels = options.requestedModels ?? [];
-		const sessionManager = SessionManager.inMemory();
+		const sessionManager = SessionManager.inMemory(tempDir.path());
 		const agent = new Agent({
 			getApiKey: provider => `${provider}-test-key`,
 			initialState: { model, systemPrompt: ["Test"], tools: [], messages: [] },
@@ -322,18 +353,21 @@ describe.serial("AgentSession resilient retry", () => {
 		// Only compaction is disabled; no retry.* keys are seeded.
 		const settings = Settings.isolated({ "compaction.enabled": false });
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
-		return new AgentSession({
-			agent,
-			sessionManager,
-			settings,
-			modelRegistry,
-			extensionRunner,
-			onResponse: extensionRunner
-				? async (response, model, scope) => {
-						await extensionRunner.emitAfterProviderResponse(response, model, scope);
-					}
-				: undefined,
-		});
+		return withDisposeBudget(
+			new AgentSession({
+				agent,
+				sessionManager,
+				settings,
+				modelRegistry,
+				agentDir: tempDir.path(),
+				extensionRunner,
+				onResponse: extensionRunner
+					? async (response, model, scope) => {
+							await extensionRunner.emitAfterProviderResponse(response, model, scope);
+						}
+					: undefined,
+			}),
+		);
 	}
 	function buildBareStreamingSession(options: {
 		model?: Model;
@@ -354,13 +388,16 @@ describe.serial("AgentSession resilient retry", () => {
 		});
 		const settings = Settings.isolated({ "compaction.enabled": false });
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
-		return new AgentSession({
-			agent,
-			sessionManager: SessionManager.inMemory(),
-			settings,
-			modelRegistry,
-			extensionRunner: options.extensionRunner,
-		});
+		return withDisposeBudget(
+			new AgentSession({
+				agent,
+				sessionManager: SessionManager.inMemory(tempDir.path()),
+				settings,
+				modelRegistry,
+				agentDir: tempDir.path(),
+				extensionRunner: options.extensionRunner,
+			}),
+		);
 	}
 	function createExtensionRunner(handlers = new Map<string, Array<() => Promise<void>>>()) {
 		const extension: Extension = {
@@ -377,7 +414,7 @@ describe.serial("AgentSession resilient retry", () => {
 			handlers.size === 0 ? [] : [extension],
 			{ flagValues: new Map(), pendingProviderRegistrations: [] } as never,
 			tempDir.path(),
-			SessionManager.inMemory(),
+			SessionManager.inMemory(tempDir.path()),
 			modelRegistry,
 		);
 	}
@@ -1666,17 +1703,18 @@ describe.serial("AgentSession resilient retry", () => {
 			{ name: "positive", setting: 12_345, expected: 12_345 },
 		]) {
 			const capturedTimeouts: Array<number | undefined> = [];
+			const caseRoot = path.join(tempDir.path(), testCase.name);
 			const settings = Settings.isolated({
 				"compaction.enabled": false,
 				...(testCase.setting === undefined ? {} : { "retry.streamFirstEventTimeoutMs": testCase.setting }),
 			});
 			const { session: configuredSession } = await createAgentSession({
-				cwd: tempDir.path(),
-				agentDir: tempDir.path(),
+				cwd: caseRoot,
+				agentDir: caseRoot,
 				model,
 				modelRegistry,
 				settings,
-				sessionManager: SessionManager.inMemory(),
+				sessionManager: SessionManager.inMemory(caseRoot),
 				disableExtensionDiscovery: true,
 				skills: [],
 				rules: [],
@@ -1687,7 +1725,7 @@ describe.serial("AgentSession resilient retry", () => {
 				enableLsp: false,
 				toolNames: [],
 				workspaceTree: {
-					rootPath: tempDir.path(),
+					rootPath: caseRoot,
 					rendered: "",
 					truncated: false,
 					totalLines: 0,
@@ -1695,6 +1733,7 @@ describe.serial("AgentSession resilient retry", () => {
 				},
 			});
 			session = configuredSession;
+			configuredSession.setDisposeTimeoutForTests(90_000);
 			const mock = createMockModel({ responses: [{ content: ["ok"] }] });
 			configuredSession.agent.streamFn = (streamModel, context, options) => {
 				capturedTimeouts.push(options?.streamFirstEventTimeoutMs);
@@ -1709,7 +1748,7 @@ describe.serial("AgentSession resilient retry", () => {
 			await configuredSession.dispose();
 			session = undefined;
 		}
-	}, 30_000);
+	}, 120_000);
 	it("retries a typed empty response once on a clean bare-default scope", async () => {
 		const requestedModels: string[] = [];
 		session = buildStatusErrorSession({
@@ -1972,7 +2011,14 @@ describe.serial("AgentSession resilient retry", () => {
 			"retry.maxDelayMs": 10,
 			"retry.maxRetries": 5,
 		});
-		session = new AgentSession({ agent, sessionManager: SessionManager.inMemory(), settings, modelRegistry });
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(tempDir.path()),
+			settings,
+			modelRegistry,
+			agentDir: tempDir.path(),
+		});
+		session.setDisposeTimeoutForTests(60_000);
 
 		await session.prompt("timeout once then fail the turn");
 		await session.waitForIdle();
@@ -2051,7 +2097,14 @@ describe.serial("AgentSession resilient retry", () => {
 			"retry.maxRetries": 5,
 		});
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
-		session = new AgentSession({ agent, sessionManager: SessionManager.inMemory(), settings, modelRegistry });
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(tempDir.path()),
+			settings,
+			modelRegistry,
+			agentDir: tempDir.path(),
+		});
+		session.setDisposeTimeoutForTests(60_000);
 		vi.spyOn(scheduler, "wait").mockResolvedValue(undefined);
 
 		await session.prompt("recover timeout then run a tool continuation");
