@@ -139,7 +139,12 @@ describe.serial("AgentSession resilient retry", () => {
 			...options.settingsOverrides,
 		});
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
-		return new AgentSession({ agent, sessionManager: SessionManager.inMemory(), settings, modelRegistry });
+		return new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(tempDir.path()),
+			settings,
+			modelRegistry,
+		});
 	}
 
 	function buildStatusErrorSession(options: {
@@ -246,7 +251,12 @@ describe.serial("AgentSession resilient retry", () => {
 			...options.settingsOverrides,
 		});
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
-		return new AgentSession({ agent, sessionManager: SessionManager.inMemory(), settings, modelRegistry });
+		return new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(tempDir.path()),
+			settings,
+			modelRegistry,
+		});
 	}
 
 	// Builds a session pinned to an explicit model (e.g. ollama-cloud) so
@@ -284,7 +294,12 @@ describe.serial("AgentSession resilient retry", () => {
 			...options.settingsOverrides,
 		});
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
-		return new AgentSession({ agent, sessionManager: SessionManager.inMemory(), settings, modelRegistry });
+		return new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(tempDir.path()),
+			settings,
+			modelRegistry,
+		});
 	}
 	// Builds a single-model session with a BARE default retry configuration:
 	// no explicit retry.* keys are set, so `legacyRetryConfigured` is false.
@@ -302,7 +317,7 @@ describe.serial("AgentSession resilient retry", () => {
 		const mock = createMockModel({ responses: options.responses });
 		const extensionRunner = options.extensionRunner;
 		const requestedModels = options.requestedModels ?? [];
-		const sessionManager = SessionManager.inMemory();
+		const sessionManager = SessionManager.inMemory(tempDir.path());
 		const agent = new Agent({
 			getApiKey: provider => `${provider}-test-key`,
 			initialState: { model, systemPrompt: ["Test"], tools: [], messages: [] },
@@ -356,7 +371,7 @@ describe.serial("AgentSession resilient retry", () => {
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
 		return new AgentSession({
 			agent,
-			sessionManager: SessionManager.inMemory(),
+			sessionManager: SessionManager.inMemory(tempDir.path()),
 			settings,
 			modelRegistry,
 			extensionRunner: options.extensionRunner,
@@ -377,7 +392,7 @@ describe.serial("AgentSession resilient retry", () => {
 			handlers.size === 0 ? [] : [extension],
 			{ flagValues: new Map(), pendingProviderRegistrations: [] } as never,
 			tempDir.path(),
-			SessionManager.inMemory(),
+			SessionManager.inMemory(tempDir.path()),
 			modelRegistry,
 		);
 	}
@@ -1676,7 +1691,7 @@ describe.serial("AgentSession resilient retry", () => {
 				model,
 				modelRegistry,
 				settings,
-				sessionManager: SessionManager.inMemory(),
+				sessionManager: SessionManager.inMemory(tempDir.path()),
 				disableExtensionDiscovery: true,
 				skills: [],
 				rules: [],
@@ -1972,7 +1987,12 @@ describe.serial("AgentSession resilient retry", () => {
 			"retry.maxDelayMs": 10,
 			"retry.maxRetries": 5,
 		});
-		session = new AgentSession({ agent, sessionManager: SessionManager.inMemory(), settings, modelRegistry });
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(tempDir.path()),
+			settings,
+			modelRegistry,
+		});
 
 		await session.prompt("timeout once then fail the turn");
 		await session.waitForIdle();
@@ -2051,7 +2071,12 @@ describe.serial("AgentSession resilient retry", () => {
 			"retry.maxRetries": 5,
 		});
 		settings.setModelRole("default", `${model.provider}/${model.id}`);
-		session = new AgentSession({ agent, sessionManager: SessionManager.inMemory(), settings, modelRegistry });
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(tempDir.path()),
+			settings,
+			modelRegistry,
+		});
 		vi.spyOn(scheduler, "wait").mockResolvedValue(undefined);
 
 		await session.prompt("recover timeout then run a tool continuation");
