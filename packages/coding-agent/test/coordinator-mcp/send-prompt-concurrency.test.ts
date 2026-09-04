@@ -53,6 +53,7 @@ describe("send_prompt same-session concurrency", () => {
 				url: sessionUrl,
 				token: "session-token",
 			});
+			const hostIncarnation = brokerProcessIncarnation(authority.pid);
 
 			const server = await createCoordinatorMcpServer({
 				env: {
@@ -77,6 +78,9 @@ describe("send_prompt same-session concurrency", () => {
 										endpointGeneration: 1,
 										pid: authority.pid,
 										endpointMtimeMs: authority.endpointMtimeMs,
+										...(hostIncarnation === undefined
+											? {}
+											: { processIncarnation: hostIncarnation, hostIncarnation }),
 									});
 									// The creation verifier reconciliation (#4731) requires the
 									// broker to prove which sidecar key became runtime authority.
@@ -108,6 +112,9 @@ describe("send_prompt same-session concurrency", () => {
 										endpointGeneration: session.endpointGeneration,
 										pid: session.pid,
 										endpointMtimeMs: session.endpointMtimeMs,
+										...(hostIncarnation === undefined
+											? {}
+											: { processIncarnation: hostIncarnation, hostIncarnation }),
 										indexSeq: 1,
 									})),
 									warnings: [],

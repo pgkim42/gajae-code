@@ -3,8 +3,9 @@ import { mkdir, mkdtemp, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
+import packageJson from "../package.json" with { type: "json" };
 import { AcpAgent, acpSkillInvocation } from "../src/modes/acp/acp-agent";
-import { writeBrokerDiscovery } from "../src/sdk/broker/discovery";
+import { brokerProcessIncarnation, writeBrokerDiscovery } from "../src/sdk/broker/discovery";
 import { SessionIndex } from "../src/sdk/broker/session-index";
 
 type TestServer = {
@@ -73,7 +74,7 @@ async function createSessionListBroker(
 	await writeBrokerDiscovery(agentDir, {
 		version: 1,
 		protocolVersion: 3,
-		packageGeneration: "test",
+		packageGeneration: packageJson.version,
 		ownerId: "test-owner",
 		pid: process.pid,
 		host: "127.0.0.1",
@@ -133,7 +134,7 @@ test("production ACP routes zero-session SDK globals through the broker adapter"
 	await writeBrokerDiscovery(agentDir, {
 		version: 1,
 		protocolVersion: 3,
-		packageGeneration: "test",
+		packageGeneration: packageJson.version,
 		ownerId: "test-owner",
 		pid: process.pid,
 		host: "127.0.0.1",
@@ -265,12 +266,14 @@ test("production ACP preserves lifecycle, turn, replay, and connection ownership
 	const agentDir = path.join(directory, ".gjc", "agent");
 	const cwd = path.join(directory, "workspace");
 	const token = "acp-contract-token";
+	const hostIncarnation = brokerProcessIncarnation(process.pid);
 	const brokerSessions: Record<string, unknown>[] = [
 		{
 			sessionId: "owned-session",
 			locator: { cwd, worktreeRoot: null, stateRoot: path.join(cwd, ".gjc", "state") },
 			live: true,
 			endpointGeneration: 1,
+			...(hostIncarnation === undefined ? {} : { processIncarnation: hostIncarnation, hostIncarnation }),
 		},
 	];
 	const lifecycleInputs: Record<string, unknown>[] = [];
@@ -424,7 +427,16 @@ test("production ACP preserves lifecycle, turn, replay, and connection ownership
 					return;
 				}
 				if (frame.type === "event_replay") {
-					socket.send(JSON.stringify({ type: "event_replay_result", id: frame.id, events: [] }));
+					socket.send(
+						JSON.stringify({
+							type: "event_replay_result",
+							id: frame.id,
+							ok: true,
+							generation: frame.sinceGeneration,
+							lastSeq: frame.sinceSeq,
+							events: [],
+						}),
+					);
 					return;
 				}
 				if (frame.type === "query_request") {
@@ -663,7 +675,7 @@ test("production ACP preserves lifecycle, turn, replay, and connection ownership
 	await writeBrokerDiscovery(agentDir, {
 		version: 1,
 		protocolVersion: 3,
-		packageGeneration: "test",
+		packageGeneration: packageJson.version,
 		ownerId: "test-owner",
 		pid: process.pid,
 		host: "127.0.0.1",
