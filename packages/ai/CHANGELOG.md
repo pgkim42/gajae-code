@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Cursor's first-event deadline now bounds asynchronous payload hooks before any authenticated request is opened, and successful HTTP/2 teardown sends END_STREAM before falling back to bounded cleanup for a peer that leaves its response half open (#4834 review).
 - Cursor conversation state and attachment blobs now reuse only within the same endpoint, credential, model, prompt, tool, and message-prefix authority. Request-local cache updates commit only after a successful terminal, preventing reused caller IDs or failed streams from disclosing prior session state (#4834 review).
 - Cursor payload hooks now receive protobuf requests as JSON-safe values, await asynchronous inspection or replacement, and validate replacement payloads before transport. Checkpoint state containing 64-bit protobuf fields no longer makes hook-side `JSON.stringify` fail on JavaScript `bigint` values.
 
