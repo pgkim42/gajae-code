@@ -184,6 +184,20 @@ describe("openai-completions compatibility", () => {
 				maxTokens: 64_000,
 			}).supportsReasoningEffort,
 		).toBe(true);
+		expect(
+			resolveOpenAICompat({
+				id: "grok-code-fast-1",
+				name: "Grok Code Fast 1",
+				api: "openai-completions",
+				provider: "xai",
+				baseUrl: "https://api.x.ai/v1",
+				reasoning: true,
+				input: ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 256_000,
+				maxTokens: 10_000,
+			}).supportsReasoningEffort,
+		).toBe(false);
 	});
 
 	it("fails closed for arbitrary custom reasoning transports and honors explicit opt-in", async () => {
