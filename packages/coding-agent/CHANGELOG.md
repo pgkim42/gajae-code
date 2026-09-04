@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- SDK chat attachment turnover now fences same-generation predecessors before provider-state migration, and Slack restart recovery preserves already-durable orphaned user messages even when pending-action state advances before replay.
 - Mid-run OpenAI remote-compaction fallback failures now stop before another provider request, surface the local summarization error through ACP/SDK terminal handling, and leave the uncompacted context unsubmitted. Successful local fallback still commits the compaction and resumes normally.
 - Opening `/model` now renders the preset landing before constructing the full model browser catalog. Canonical search indexing, sorting, and the redundant offline registry refresh are deferred until the user searches or chooses a browse action, while the lightweight preset-availability check remains immediate and scoped or direct-search selectors still load immediately.
 - `/model` provider-tab refreshes now reuse the already loaded static catalog and update only the selected provider's discovery state, avoiding repeated signed preset registry work while retaining full-catalog refresh behavior for static configuration changes.
