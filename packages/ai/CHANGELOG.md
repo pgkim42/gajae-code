@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Cursor conversation state and attachment blobs now reuse only within the same endpoint, credential, model, prompt, tool, and message-prefix authority. Request-local cache updates commit only after a successful terminal, preventing reused caller IDs or failed streams from disclosing prior session state (#4834 review).
 - Cursor payload hooks now receive protobuf requests as JSON-safe values, await asynchronous inspection or replacement, and validate replacement payloads before transport. Checkpoint state containing 64-bit protobuf fields no longer makes hook-side `JSON.stringify` fail on JavaScript `bigint` values.
 
 ## [0.16.3] - 2026-09-04
